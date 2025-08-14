@@ -1,5 +1,5 @@
 """
-TikTok Trend Finder for Roblox + Dance Content
+TikTok Trend Finder for hashtags
 Author: Pablo & ChatGPT
 Purpose:
     - Pull trending TikTok videos
@@ -17,72 +17,42 @@ import pandas as pd
 from datetime import datetime
 
 # ========== CONFIGURATION ==========
-TREND_LIMIT = 50  # Number of trending videos to fetch
-FILTER_KEYWORDS = []  # Keywords to filter trends, e.g. ["roblox", "dance", "gaming"]
-while True:
-    keyword = str(input("Enter a keyword, x to stop: "))
-    if keyword.lower() == 'x':
-        break
-    else:
-        FILTER_KEYWORDS.append(keyword)
+TREND_LIMIT = 50  # Number of videos to fetch
 OUTPUT_FOLDER = "./"  # Where to save the CSV report
 # ====================================
 
-def contains_keywords(text, keywords):
+def fetch_trends_by_hashtag(hashtag):
     """
-    Checks if any keyword appears in the given text (case-insensitive).
-    Returns True if at least one match is found.
+    Fetches TikTok videos by hashtag.
     """
-    text_lower = text.lower()
-    return any(keyword.lower() in text_lower for keyword in keywords)
-
-def fetch_trends():
-    """
-    Connects to TikTokApi and fetches trending videos.
-    Extracts author, stats, hashtags, sound info.
-    Returns a list of dictionaries for each video.
-    """
-    api = TikTokApi.get_instance()
-
-    # Fetch trending videos
-    trending_videos = api.trending(count=TREND_LIMIT)
+    api = TikTokApi()
+    videos = api.by_hashtag(hashtag, count=TREND_LIMIT)
 
     data = []
-    for video in trending_videos:
-        hashtags = [tag['title'] for tag in video['challenges']] if 'challenges' in video else []
-        sound_name = video['music']['title'] if 'music' in video else "Unknown"
-        sound_url = video['music']['playUrl'] if 'music' in video else None
-        stats = video['stats'] if 'stats' in video else {}
-
-        # Combine hashtags into one string for easy filtering
-        all_text = " ".join(hashtags) + " " + sound_name
+    for video in videos:
+        hashtags = [tag['title'] for tag in video.get('challenges', [])]
+        sound_name = video.get('music', {}).get('title', "Unknown")
+        sound_url = video.get('music', {}).get('playUrl')
+        stats = video.get('stats', {})
 
         data.append({
-            "Author": video['author']['uniqueId'] if 'author' in video else "Unknown",
+            "Author": video.get('author', {}).get('uniqueId', "Unknown"),
             "Views": stats.get('playCount', 0),
             "Likes": stats.get('diggCount', 0),
             "Shares": stats.get('shareCount', 0),
             "Hashtags": hashtags,
             "Sound": sound_name,
             "Sound URL": sound_url,
-            "AllText": all_text
         })
 
     return data
 
-def filter_trends(data):
-    """
-    Filters trend data for Roblox / dance related trends.
-    Returns a filtered list of dictionaries.
-    """
-    return [item for item in data if contains_keywords(item["AllText"], FILTER_KEYWORDS)]
-
-def save_to_csv(data):
+def save_to_csv(data, hashtag):
     """
     Saves trend data to a CSV file.
     """
     df = pd.DataFrame(data)
-    filename = f"{OUTPUT_FOLDER}tiktok_trends_{datetime.now().strftime('%Y-%m-%d')}.csv"
+    filename = f"{OUTPUT_FOLDER}tiktok_trends_{hashtag}_{datetime.now().strftime('%Y-%m-%d')}.csv"
     df.to_csv(filename, index=False)
     print(f"[✔] Saved trend report to {filename}")
 
@@ -91,22 +61,20 @@ def print_top_summary(data, limit=5):
     Prints the top N trends by views in the console.
     """
     sorted_data = sorted(data, key=lambda x: x["Views"], reverse=True)
-    print("\n===== Top Trending Roblox/Dance TikToks =====")
+    print("\n===== Top Trending TikToks =====")
     for idx, trend in enumerate(sorted_data[:limit], start=1):
         print(f"{idx}. {trend['Sound']} | Views: {trend['Views']:,} | Hashtags: {', '.join(trend['Hashtags'])}")
         if trend['Sound URL']:
             print(f"   🔗 {trend['Sound URL']}")
 
 def main():
-    print("[🔍] Fetching trending TikToks...")
-    trends = fetch_trends()
+    hashtag = input("Enter a hashtag (without #): ").strip()
+    print(f"[🔍] Fetching TikToks for #{hashtag} ...")
+    trends = fetch_trends_by_hashtag(hashtag)
 
-    print(f"[📊] {len(trends)} total trends fetched.")
-    filtered_trends = filter_trends(trends)
-    print(f"[🎯] {len(filtered_trends)} trends match Roblox/dance keywords.")
-
-    save_to_csv(filtered_trends)
-    print_top_summary(filtered_trends)
+    print(f"[📊] {len(trends)} total videos fetched for #{hashtag}.")
+    save_to_csv(trends, hashtag)
+    print_top_summary(trends)
 
 if __name__ == "__main__":
     main()
